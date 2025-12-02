@@ -47,3 +47,9 @@
 [
   (backslash_escape)
 ] @string.escape
+
+((line_comment) @injections.content
+  (#set! injection.language "comment"))
+
+((block_comment) @injections.content
+  (#set! injection.language "comment"))
