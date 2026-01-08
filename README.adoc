@@ -67,7 +67,7 @@ But new snippets are necessary...
 |===
 | Prefix | Description
 
-| line-through | Insert an line-through text
+| line-through | Insert a line-through text
 | overline | Insert an overline text
 | underline | Insert an underline text
 |===
