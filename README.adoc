@@ -45,10 +45,10 @@ Some snippets were adapted from link:https://github.com/asciidoctor/asciidoctor-
 | footnote | Insert footnote
 | footnote-label | Insert footnote with label
 | image | Insert image block
-| image | Insert image inline
+| image-block | Insert image inline
 | include | Insert include statement
 | link | Insert link
-| link | Insert simple link
+| link-simple | Insert simple link
 | literal | Insert literal block
 | mailto | Insert mailto link
 | ordered list | Insert ordered list

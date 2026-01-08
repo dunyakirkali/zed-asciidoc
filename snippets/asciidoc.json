@@ -10,7 +10,7 @@
     "description": "Insert image inline"
   },
   "Insert image block": {
-    "prefix": "image",
+    "prefix": "image-block",
     "body": "image::${1:path}[${2:alt}]",
     "description": "Insert image block"
   },
@@ -25,7 +25,7 @@
     "description": "Insert link"
   },
   "Insert simple link": {
-    "prefix": "link",
+    "prefix": "link-simple",
     "body": "https://${1:link}[${2:text}]",
     "description": "Insert simple link"
   },
