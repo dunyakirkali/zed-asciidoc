@@ -136,9 +136,9 @@
     "body": "[.overline]#${1:overline text}#",
     "description": "Insert an overline text"
   },
-  "Insert an line-through text": {
+  "Insert a line-through text": {
     "prefix": "line-through",
     "body": "[.line-through]#${1:line-through text}#",
-    "description": "Insert an line-through text"
+    "description": "Insert a line-through text"
   }
 }
