@@ -34,7 +34,7 @@ When contributing changes to highlight queries:
 
 === Snippets
 
-The some snippets were adapted from link:https://github.com/asciidoctor/asciidoctor-vscode[asciidoc vscode extension], thanks!
+Some snippets were adapted from link:https://github.com/asciidoctor/asciidoctor-vscode[asciidoc vscode extension], thanks!
 
 .Adapted Snippets
 |===
