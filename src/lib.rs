@@ -82,10 +82,11 @@ impl AsciiDocExtension {
         let (platform, arch) = zed::current_platform();
         let target = match (platform, arch) {
             (zed::Os::Windows, zed::Architecture::X8664) => "windows-x64",
+            (zed::Os::Windows, zed::Architecture::Aarch64) => "windows-arm64",
             (zed::Os::Linux, zed::Architecture::X8664) => "linux-x64",
+            (zed::Os::Linux, zed::Architecture::Aarch64) => "linux-arm64",
             (zed::Os::Mac, zed::Architecture::Aarch64) => "macos-arm64",
             (zed::Os::Mac, zed::Architecture::X8664) => "macos-x64",
-            (zed::Os::Linux, zed::Architecture::Aarch64) => "linux-arm64",
             _ => {
                 return Err(
                     "No asciidoctor-d binary for this platform yet. Build from source or set asciidoctorDPath."
