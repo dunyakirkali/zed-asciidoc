@@ -4,26 +4,31 @@
   (line) @name) @item
 
 ;; Section title level 1
-(title1
-  (title_h1_marker) @context
-  (line) @name) @item
+(section
+  (title1
+    (title_h1_marker) @context
+    (line) @name)) @item
 
 ;; Section title level 2
-(title2
-  (title_h2_marker) @context
-  (line) @name) @item
+(section
+  (title2
+    (title_h2_marker) @context
+    (line) @name)) @item
 
 ;; Section title level 3
-(title3
-  (title_h3_marker) @context
-  (line) @name) @item
+(section
+  (title3
+    (title_h3_marker) @context
+    (line) @name)) @item
 
 ;; Section title level 4
-(title4
-  (title_h4_marker) @context
-  (line) @name) @item
+(section
+  (title4
+    (title_h4_marker) @context
+    (line) @name)) @item
 
 ;; Section title level 5
-(title5
-  (title_h5_marker) @context
-  (line) @name) @item
+(section
+  (title5
+    (title_h5_marker) @context
+    (line) @name)) @item
