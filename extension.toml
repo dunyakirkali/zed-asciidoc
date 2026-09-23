@@ -9,10 +9,10 @@ snippets = "./snippets/asciidoc.json"
 
 [grammars.asciidoc_inline]
 repository = "https://github.com/cathaysia/tree-sitter-asciidoc"
-commit = "229b3d0435cd7760c6a8de2131d1763b160e054a"
+commit = "c0b6adb497cb707b3a13c3d846aac1f54a1a1b5e"
 path = "tree-sitter-asciidoc_inline"
 
 [grammars.asciidoc]
 repository = "https://github.com/cathaysia/tree-sitter-asciidoc"
-commit = "229b3d0435cd7760c6a8de2131d1763b160e054a"
+commit = "c0b6adb497cb707b3a13c3d846aac1f54a1a1b5e"
 path = "tree-sitter-asciidoc"
