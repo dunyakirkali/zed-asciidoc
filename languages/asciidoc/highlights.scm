@@ -1,12 +1,20 @@
-(document_title) @title @variant
+[
+  (document_title)
+  (title1)
+  (title2)
+  (title3)
+  (title4)
+  (title5)
+] @title
 
 [
-    (title1)
-    (title2)
-    (title3)
-    (title4)
-    (title5)
-] @title
+  (title_h0_marker)
+  (title_h1_marker)
+  (title_h2_marker)
+  (title_h3_marker)
+  (title_h4_marker)
+  (title_h5_marker)
+] @punctuation.special
 
 (email) @link_uri @link_text
 
@@ -94,12 +102,12 @@
 
 (callout_list_marker) @punctuation.special
 
-; (block_macro
-;   (block_macro_name) @keyword
-;   "::" @punctuation.delimiter
-;   (target)? @markup.link
-;   "[" @punctuation.bracket
-;   "]" @punctuation.bracket)
+(block_macro
+  (block_macro_name) @keyword
+  "::" @punctuation.delimiter
+  (target)? @link_uri
+  "[" @punctuation.bracket
+  "]" @punctuation.bracket)
 
 (attribute_name) @attribute
 

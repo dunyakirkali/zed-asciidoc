@@ -2,7 +2,7 @@
 
 This extension adds support for the link:https://asciidoc.org/[AsciiDoc] language for Zed.
 
-It is based on link:https://github.com/cathaysia/tree-sitter-asciidoc/[tree-sitter-asciidoc].
+It uses link:https://github.com/dunyakirkali/tree-sitter-asciidoc/[tree-sitter-asciidoc].
 
 == Development
 
