@@ -4,12 +4,68 @@ This extension adds support for the link:https://asciidoc.org/[AsciiDoc] languag
 
 It uses link:https://github.com/dunyakirkali/tree-sitter-asciidoc/[tree-sitter-asciidoc].
 
-== Development
+== Language Server
+
+link:https://github.com/nlopes/acdc/tree/main/acdc-lsp[acdc-lsp] is not yet
+publishing public builds you will need to provide your own `acdc-lsp` binary.
+
+You can build it by checking out link:https://github.com/nlopes/acdc/[nlopes/acdc]
+and manually building and adding it to your path.
+
+[source,sh]
+----
+cargo install --path acdc-lsp --locked
+----
+
+=== Semantic Highlighting
+
+To switch from using tree-sitter for syntax highlighting you can enable
+LSP semantic highlighting, the LSP outline, and folding ranges explicitly:
+
+[source,json]
+----
+{
+  "languages": {
+    "AsciiDoc": {
+      "semantic_tokens": "combined",
+      "document_symbols": "on",
+      "document_folding_ranges": "on"
+    }
+  }
+}
+----
+
+
+=== Server Settings
+
+Use `lsp.acdc-lsp.settings` in Zed's settings or a project's `.zed/settings.json`
+to configure the analysis backend and compatibility mode:
+
+[source,json]
+----
+{
+  "lsp": {
+    "acdc-lsp": {
+      "settings": {
+        "backend": "pdf",
+        "compatibilityMode": "draft"
+      }
+    }
+  }
+}
+----
+
+The defaults are `html5` and `asciidoctor`. The adapter forwards these settings
+through `workspace/configuration`, including updates while the server is running.
+`lsp.acdc-lsp.initialization_options` supplies fallback values.
 
 === Project Structure
 
 ----
 zed-asciidoc/
+├── Cargo.toml                 # Rust adapter package
+├── src/
+│   └── lib.rs                 # acdc-lsp adapter
 ├── languages/
 │   ├── asciidoc/
 │   │   ├── highlights.scm      # Block-level syntax highlighting
