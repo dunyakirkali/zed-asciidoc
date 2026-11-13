@@ -3,9 +3,13 @@ name = "AsciiDoc"
 version = "0.6.0"
 schema_version = 1
 authors = ["Dunya Kirkali <dunyakirkali@gmail.com>"]
-description = "Support for AsciiDoc syntax"
+description = "AsciiDoc syntax and language support with acdc-lsp"
 repository = "https://github.com/dunyakirkali/zed-asciidoc"
 snippets = "./snippets/asciidoc.json"
+
+[language_servers.acdc-lsp]
+name = "acdc-lsp"
+languages = ["AsciiDoc"]
 
 [grammars.asciidoc_inline]
 repository = "https://github.com/dunyakirkali/tree-sitter-asciidoc"
