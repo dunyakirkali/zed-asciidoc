@@ -4,7 +4,6 @@ import {
   ProposedFeatures,
   InitializeParams,
   TextDocumentSyncKind,
-  CodeActionKind,
   CodeActionParams,
   CodeAction,
   Command,
@@ -14,7 +13,7 @@ import {
 } from "vscode-languageserver/node.js";
 import { TextDocument } from "vscode-languageserver-textdocument";
 import asciidoctorFactory from "asciidoctor";
-import { mkdirSync, writeFileSync, existsSync } from "node:fs";
+import { mkdirSync, writeFileSync, existsSync, unlinkSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { pathToFileURL, fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
@@ -48,9 +47,7 @@ connection.onInitialize((_params: InitializeParams) => {
   return {
     capabilities: {
       textDocumentSync: TextDocumentSyncKind.Incremental,
-      codeActionProvider: {
-        codeActionKinds: [CodeActionKind.Source],
-      },
+      codeActionProvider: true,
       executeCommandProvider: {
         commands: [PREVIEW_COMMAND],
       },
@@ -86,7 +83,6 @@ connection.onCodeAction((params: CodeActionParams): CodeAction[] => {
   return [
     {
       title: "Preview AsciiDoc in browser",
-      kind: CodeActionKind.Source,
       command: Command.create(
         "Preview AsciiDoc in browser",
         PREVIEW_COMMAND,
@@ -120,7 +116,7 @@ connection.onExecuteCommand(async (params: ExecuteCommandParams) => {
   try {
     if (settings.engine === "tree-sitter") {
       connection.window.showWarningMessage(
-        'AsciiDoc engine is "tree-sitter" (highlighting only). Preview needs "asciidoctor-js" or "asciidoctor-d". Set lsp.asciidoc-lsp.settings.engine in settings.json.',
+        'AsciiDoc engine is "tree-sitter" (highlighting only). Preview needs "asciidoctor-js" or "asciidoctor-d". Set lsp.asciidoc-preview.settings.engine in settings.json.',
       );
       return;
     }
@@ -146,10 +142,7 @@ connection.onExecuteCommand(async (params: ExecuteCommandParams) => {
 
 async function refreshSettings(): Promise<void> {
   try {
-    const cfg = await connection.workspace.getConfiguration([
-      { section: "asciidoc-lsp" },
-      { section: "asciidoc" },
-    ]);
+    const cfg = await connection.workspace.getConfiguration("asciidoc-preview");
     if (Array.isArray(cfg)) {
       for (const item of cfg) {
         applySettingsObject(item);
@@ -168,7 +161,7 @@ function applySettingsObject(raw: unknown): void {
   }
   const obj = raw as Record<string, unknown>;
   // Zed may send the settings object directly, or nested.
-  const candidates = [obj, obj.settings, obj.asciidoc, obj["asciidoc-lsp"]].filter(
+  const candidates = [obj, obj.settings, obj.asciidoc, obj["asciidoc-preview"]].filter(
     (v) => v && typeof v === "object",
   ) as Record<string, unknown>[];
 
@@ -194,8 +187,13 @@ function normalizeEngine(value: string): Engine {
 }
 
 function isAsciiDoc(uri: string): boolean {
-  const lower = uri.toLowerCase();
-  return lower.endsWith(".adoc") || lower.endsWith(".asciidoc");
+  const path = uri.split("?")[0].toLowerCase();
+  return (
+    path.endsWith(".adoc") ||
+    path.endsWith(".asciidoc") ||
+    path.endsWith(".asc") ||
+    path.endsWith(".ad")
+  );
 }
 
 function renderToTempHtml(doc: TextDocument): string {
@@ -207,7 +205,7 @@ function renderToTempHtml(doc: TextDocument): string {
   const outPath = join(outDir, `${hash}.html`);
 
   if (settings.engine === "asciidoctor-d") {
-    return renderWithAsciidoctorD(doc, baseDir, outPath);
+    return renderWithAsciidoctorD(doc, baseDir, outPath, hash, sourcePath);
   }
 
   const html = asciidoctor.convert(doc.getText(), {
@@ -229,34 +227,61 @@ function renderWithAsciidoctorD(
   doc: TextDocument,
   baseDir: string,
   outPath: string,
+  hash: string,
+  sourcePath: string | undefined,
 ): string {
   const bin = resolveAsciidoctorD();
-  const srcPath = join(
-    tmpdir(),
-    "zed-asciidoc-preview",
-    `src-${Date.now()}.adoc`,
-  );
-  writeFileSync(srcPath, doc.getText(), "utf8");
+  // asciidoctor-d uses the input file's directory as the include base, not cwd.
+  // Write the buffer beside the real document so includes and images resolve,
+  // then delete that scratch file.
+  let srcPath = sourcePath
+    ? join(baseDir, `.zed-asciidoc-preview-${hash}.adoc`)
+    : join(outDirForUntitled(), `src-${hash}.adoc`);
+  try {
+    mkdirSync(dirname(srcPath), { recursive: true });
+    writeFileSync(srcPath, doc.getText(), "utf8");
+  } catch (err) {
+    if (!sourcePath) {
+      throw err;
+    }
+    srcPath = join(outDirForUntitled(), `src-${hash}.adoc`);
+    mkdirSync(dirname(srcPath), { recursive: true });
+    writeFileSync(srcPath, doc.getText(), "utf8");
+  }
 
-  const result = spawnSync(bin, ["-o", outPath, srcPath], {
-    cwd: baseDir,
-    encoding: "utf8",
-  });
+  try {
+    const result = spawnSync(bin, ["-o", outPath, srcPath], {
+      cwd: baseDir,
+      encoding: "utf8",
+    });
 
-  if (result.error) {
-    throw new Error(
-      `Failed to run asciidoctor-d (${bin}): ${result.error.message}. Install it or set lsp.asciidoc-lsp.settings.asciidoctorDPath.`,
-    );
+    if (result.error) {
+      throw new Error(
+        `Failed to run asciidoctor-d (${bin}): ${result.error.message}. Install it or set lsp.asciidoc-preview.settings.asciidoctorDPath.`,
+      );
+    }
+    if (result.status !== 0) {
+      throw new Error(
+        `asciidoctor-d exited ${result.status}: ${result.stderr || result.stdout}`,
+      );
+    }
+    if (!existsSync(outPath)) {
+      throw new Error("asciidoctor-d did not write the expected HTML file");
+    }
+    return outPath;
+  } finally {
+    try {
+      unlinkSync(srcPath);
+    } catch {
+      // Scratch file is best-effort.
+    }
   }
-  if (result.status !== 0) {
-    throw new Error(
-      `asciidoctor-d exited ${result.status}: ${result.stderr || result.stdout}`,
-    );
-  }
-  if (!existsSync(outPath)) {
-    throw new Error("asciidoctor-d did not write the expected HTML file");
-  }
-  return outPath;
+}
+
+function outDirForUntitled(): string {
+  const dir = join(tmpdir(), "zed-asciidoc-preview");
+  mkdirSync(dir, { recursive: true });
+  return dir;
 }
 
 function resolveAsciidoctorD(): string {
@@ -273,7 +298,7 @@ function resolveAsciidoctorD(): string {
     return line;
   }
   throw new Error(
-    'engine is "asciidoctor-d" but asciidoctor-d was not found on PATH. Download a release from dlang-supplemental/asciidoctor-d or set asciidoctorDPath.',
+    'engine is "asciidoctor-d" but asciidoctor-d was not found. Set lsp.asciidoc-preview.settings.asciidoctorDPath or install a release from dlang-supplemental/asciidoctor-d.',
   );
 }
 

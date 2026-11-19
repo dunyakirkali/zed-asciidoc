@@ -12,10 +12,10 @@ It uses link:https://github.com/dunyakirkali/tree-sitter-asciidoc/[tree-sitter-a
 * **Engine choice** via `settings.json` (tree-sitter / Asciidoctor.js / asciidoctor-d)
 
 Open an `.adoc` buffer, run a code action, and choose
-`Preview AsciiDoc in browser`. The language server converts HTML and asks Zed
-to open it via LSP `window/showDocument` (`external: true`).
+`Preview AsciiDoc in browser`. A small helper converts the buffer to HTML and
+asks Zed to open it via `window/showDocument` (`external: true`).
 
-Requires Node.js on `PATH` for the bundled LSP. In-editor preview is blocked by
+Requires Node.js on `PATH`. In-editor preview is blocked by
 Zed today; see link:https://github.com/zed-industries/zed/issues/21208[zed#21208]
 and link:https://github.com/zed-industries/zed/discussions/27163[discussion #27163].
 
@@ -27,7 +27,7 @@ Zed has no extension options GUI yet — configure in `settings.json`:
 ----
 {
   "lsp": {
-    "asciidoc-lsp": {
+    "asciidoc-preview": {
       "settings": {
         "engine": "asciidoctor-js"
       }
@@ -50,7 +50,7 @@ Optional absolute path override:
 ----
 {
   "lsp": {
-    "asciidoc-lsp": {
+    "asciidoc-preview": {
       "settings": {
         "engine": "asciidoctor-d",
         "asciidoctorDPath": "C:/tools/asciidoctor-d.exe"
@@ -75,7 +75,7 @@ zed-asciidoc/
 │       ├── highlights.scm      # Inline syntax highlighting
 │       ├── injections.scm      # Inline grammar injections
 │       └── config.toml
-├── lsp/                        # Node LSP (Asciidoctor.js → browser preview)
+├── lsp/                        # Preview helper (Asciidoctor.js → browser)
 ├── src/lib.rs                  # Zed extension: starts the language server
 ├── snippets/
 │   └── asciidoc.json           # Snippets

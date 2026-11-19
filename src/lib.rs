@@ -1,5 +1,5 @@
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use zed_extension_api::{
     self as zed,
     serde_json::{json, Value},
@@ -37,7 +37,7 @@ impl AsciiDocExtension {
         {
             let p = PathBuf::from(path);
             if p.is_file() {
-                return Ok(p);
+                return Self::absolutize(p);
             }
         }
 
@@ -47,7 +47,7 @@ impl AsciiDocExtension {
         };
 
         if let Some(path) = worktree.which("asciidoctor-d") {
-            return Ok(PathBuf::from(path));
+            return Self::absolutize(PathBuf::from(path));
         }
 
         if let Some(path) = &self.cached_asciidoctor_d {
@@ -56,9 +56,22 @@ impl AsciiDocExtension {
             }
         }
 
-        let path = Self::download_asciidoctor_d(language_server_id, binary_name)?;
+        let path = Self::absolutize(Self::download_asciidoctor_d(
+            language_server_id,
+            binary_name,
+        )?)?;
         self.cached_asciidoctor_d = Some(path.clone());
         Ok(path)
+    }
+
+    /// Zed starts the preview process with the project as its working directory.
+    /// Paths handed to that process must be absolute.
+    fn absolutize(path: PathBuf) -> Result<PathBuf> {
+        if path.is_absolute() {
+            return Ok(path);
+        }
+        let cwd = std::env::current_dir().map_err(|e| format!("extension directory: {e}"))?;
+        Ok(cwd.join(path))
     }
 
     fn download_asciidoctor_d(
@@ -136,25 +149,13 @@ impl AsciiDocExtension {
             zed::download_file(&asset.download_url, &version_dir, file_type)
                 .map_err(|e| format!("Failed to download asciidoctor-d: {e}"))?;
 
-            // Archives may extract flat or nested; normalize to version_dir/binary_name.
+            // Current releases put the binary at the archive root. Also accept one
+            // nested directory, and do not stop on a same-named non-file.
             if !binary_path.is_file() {
-                if let Ok(entries) = fs::read_dir(&version_dir) {
-                    for entry in entries.flatten() {
-                        let p = entry.path();
-                        if p.file_name().and_then(|n| n.to_str()) == Some(binary_name) {
-                            // already correct location conceptually
-                            break;
-                        }
-                        if p.is_dir() {
-                            let nested = p.join(binary_name);
-                            if nested.is_file() {
-                                fs::rename(&nested, &binary_path).map_err(|e| {
-                                    format!("Failed to relocate asciidoctor-d: {e}")
-                                })?;
-                                break;
-                            }
-                        }
-                    }
+                if let Some(nested) = Self::find_nested_binary(Path::new(&version_dir), binary_name)
+                {
+                    fs::rename(&nested, &binary_path)
+                        .map_err(|e| format!("Failed to relocate asciidoctor-d: {e}"))?;
                 }
             }
 
@@ -190,15 +191,28 @@ impl AsciiDocExtension {
         Ok(binary_path)
     }
 
-    fn bundled_server_path() -> Result<String> {
-        const CANDIDATES: &[&str] = &["lsp/dist/server.js", "./lsp/dist/server.js"];
-        for candidate in CANDIDATES {
-            if fs::metadata(candidate).is_ok() {
-                return Ok(candidate.to_string());
+    fn find_nested_binary(version_dir: &Path, binary_name: &str) -> Option<PathBuf> {
+        let entries = fs::read_dir(version_dir).ok()?;
+        for entry in entries.flatten() {
+            let p = entry.path();
+            if p.is_dir() {
+                let nested = p.join(binary_name);
+                if nested.is_file() {
+                    return Some(nested);
+                }
             }
         }
+        None
+    }
+
+    fn bundled_server_path() -> Result<String> {
+        let cwd = std::env::current_dir().map_err(|e| format!("extension directory: {e}"))?;
+        let script = cwd.join("lsp").join("dist").join("server.js");
+        if script.is_file() {
+            return Ok(script.to_string_lossy().into_owned());
+        }
         Err(
-            "Bundled AsciiDoc LSP missing (lsp/dist/server.js). Run `pnpm install && pnpm build` in lsp/."
+            "Bundled AsciiDoc preview helper missing (lsp/dist/server.js). Run `pnpm install && pnpm build` in lsp/."
                 .into(),
         )
     }
@@ -216,16 +230,22 @@ impl zed::Extension for AsciiDocExtension {
         language_server_id: &LanguageServerId,
         worktree: &zed::Worktree,
     ) -> Result<zed::Command> {
-        let lsp_settings = LspSettings::for_worktree("asciidoc-lsp", worktree).ok();
+        let lsp_settings = LspSettings::for_worktree("asciidoc-preview", worktree).ok();
         let settings = lsp_settings.and_then(|s| s.settings);
         let engine = Self::engine_from_settings(&settings);
 
-        // Eagerly fetch the D CLI when selected so preview works without PATH setup.
+        // Fetch the D CLI when selected, but still start the preview helper if
+        // the download fails so the user gets a preview error instead of a dead server.
         if engine == "asciidoctor-d" {
-            let _ = self.resolve_asciidoctor_d(language_server_id, worktree, &settings)?;
+            if let Err(err) = self.resolve_asciidoctor_d(language_server_id, worktree, &settings) {
+                zed::set_language_server_installation_status(
+                    language_server_id,
+                    &zed::LanguageServerInstallationStatus::Failed(err),
+                );
+            }
         }
 
-        if let Some(path) = worktree.which("asciidoc-lsp") {
+        if let Some(path) = worktree.which("asciidoc-preview") {
             return Ok(zed::Command {
                 command: path,
                 args: vec![],
@@ -234,9 +254,9 @@ impl zed::Extension for AsciiDocExtension {
         }
 
         let node = zed::node_binary_path().or_else(|_| {
-            worktree
-                .which("node")
-                .ok_or_else(|| "Node.js is required for AsciiDoc LSP (node not found)".to_string())
+            worktree.which("node").ok_or_else(|| {
+                "Node.js is required for AsciiDoc preview (node not found)".to_string()
+            })
         })?;
 
         let script = Self::bundled_server_path()?;
@@ -252,7 +272,7 @@ impl zed::Extension for AsciiDocExtension {
         language_server_id: &LanguageServerId,
         worktree: &zed::Worktree,
     ) -> Result<Option<Value>> {
-        let lsp_settings = LspSettings::for_worktree("asciidoc-lsp", worktree)?;
+        let lsp_settings = LspSettings::for_worktree("asciidoc-preview", worktree)?;
         let mut settings = lsp_settings.settings.unwrap_or_else(|| {
             json!({
                 "engine": "asciidoctor-js"
@@ -261,12 +281,25 @@ impl zed::Extension for AsciiDocExtension {
 
         let engine = Self::engine_from_settings(&Some(settings.clone()));
         if engine == "asciidoctor-d" {
-            let path = self.resolve_asciidoctor_d(language_server_id, worktree, &Some(settings.clone()))?;
-            if let Some(obj) = settings.as_object_mut() {
-                obj.insert(
-                    "asciidoctorDPath".into(),
-                    Value::String(path.to_string_lossy().into_owned()),
-                );
+            match self.resolve_asciidoctor_d(
+                language_server_id,
+                worktree,
+                &Some(settings.clone()),
+            ) {
+                Ok(path) => {
+                    if let Some(obj) = settings.as_object_mut() {
+                        obj.insert(
+                            "asciidoctorDPath".into(),
+                            Value::String(path.to_string_lossy().into_owned()),
+                        );
+                    }
+                }
+                Err(err) => {
+                    zed::set_language_server_installation_status(
+                        language_server_id,
+                        &zed::LanguageServerInstallationStatus::Failed(err),
+                    );
+                }
             }
         }
 

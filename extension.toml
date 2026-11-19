@@ -7,7 +7,7 @@ authors = [
     "AMDphreak <https://github.com/AMDphreak>",
 ]
 description = "AsciiDoc syntax highlighting, snippets, and browser HTML preview"
-repository = "https://github.com/antora-supplemental/zed-asciidoc"
+repository = "https://github.com/dunyakirkali/zed-asciidoc"
 snippets = "./snippets/asciidoc.json"
 
 [grammars.asciidoc_inline]
@@ -20,6 +20,6 @@ repository = "https://github.com/dunyakirkali/tree-sitter-asciidoc"
 commit = "567de233efcb1024870e7d745ed2580c8a54b247"
 path = "tree-sitter-asciidoc"
 
-[language_servers.asciidoc-lsp]
-name = "AsciiDoc LSP"
+[language_servers.asciidoc-preview]
+name = "AsciiDoc Preview"
 languages = ["AsciiDoc"]

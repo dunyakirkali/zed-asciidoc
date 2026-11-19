@@ -4332,18 +4332,18 @@ var require_main2 = __commonJS({
         }
         DocumentSymbol2.is = is;
       })(DocumentSymbol || (exports2.DocumentSymbol = DocumentSymbol = {}));
-      var CodeActionKind2;
-      (function(CodeActionKind3) {
-        CodeActionKind3.Empty = "";
-        CodeActionKind3.QuickFix = "quickfix";
-        CodeActionKind3.Refactor = "refactor";
-        CodeActionKind3.RefactorExtract = "refactor.extract";
-        CodeActionKind3.RefactorInline = "refactor.inline";
-        CodeActionKind3.RefactorRewrite = "refactor.rewrite";
-        CodeActionKind3.Source = "source";
-        CodeActionKind3.SourceOrganizeImports = "source.organizeImports";
-        CodeActionKind3.SourceFixAll = "source.fixAll";
-      })(CodeActionKind2 || (exports2.CodeActionKind = CodeActionKind2 = {}));
+      var CodeActionKind;
+      (function(CodeActionKind2) {
+        CodeActionKind2.Empty = "";
+        CodeActionKind2.QuickFix = "quickfix";
+        CodeActionKind2.Refactor = "refactor";
+        CodeActionKind2.RefactorExtract = "refactor.extract";
+        CodeActionKind2.RefactorInline = "refactor.inline";
+        CodeActionKind2.RefactorRewrite = "refactor.rewrite";
+        CodeActionKind2.Source = "source";
+        CodeActionKind2.SourceOrganizeImports = "source.organizeImports";
+        CodeActionKind2.SourceFixAll = "source.fixAll";
+      })(CodeActionKind || (exports2.CodeActionKind = CodeActionKind = {}));
       var CodeActionTriggerKind;
       (function(CodeActionTriggerKind2) {
         CodeActionTriggerKind2.Invoked = 1;
@@ -48398,7 +48398,7 @@ function getWellformedEdit(textEdit) {
 
 // src/server.ts
 var import_asciidoctor = __toESM(require_asciidoctor2(), 1);
-import { mkdirSync, writeFileSync, existsSync } from "node:fs";
+import { mkdirSync, writeFileSync, existsSync, unlinkSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { pathToFileURL, fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
@@ -48410,15 +48410,12 @@ var settings = {
 };
 var connection = (0, import_node.createConnection)(import_node.ProposedFeatures.all);
 var documents = new import_node.TextDocuments(TextDocument);
-var asciidoctorFn = typeof import_asciidoctor.default === "function" ? import_asciidoctor.default : import_asciidoctor.default.default;
-var asciidoctor = asciidoctorFn();
+var asciidoctor = (0, import_asciidoctor.default)();
 connection.onInitialize((_params) => {
   return {
     capabilities: {
       textDocumentSync: import_node.TextDocumentSyncKind.Incremental,
-      codeActionProvider: {
-        codeActionKinds: [import_node.CodeActionKind.Source]
-      },
+      codeActionProvider: true,
       executeCommandProvider: {
         commands: [PREVIEW_COMMAND]
       },
@@ -48448,7 +48445,6 @@ connection.onCodeAction((params) => {
   return [
     {
       title: "Preview AsciiDoc in browser",
-      kind: import_node.CodeActionKind.Source,
       command: import_node.Command.create(
         "Preview AsciiDoc in browser",
         PREVIEW_COMMAND,
@@ -48478,7 +48474,7 @@ connection.onExecuteCommand(async (params) => {
   try {
     if (settings.engine === "tree-sitter") {
       connection.window.showWarningMessage(
-        'AsciiDoc engine is "tree-sitter" (highlighting only). Preview needs "asciidoctor-js" or "asciidoctor-d". Set lsp.asciidoc-lsp.settings.engine in settings.json.'
+        'AsciiDoc engine is "tree-sitter" (highlighting only). Preview needs "asciidoctor-js" or "asciidoctor-d". Set lsp.asciidoc-preview.settings.engine in settings.json.'
       );
       return;
     }
@@ -48502,10 +48498,7 @@ connection.onExecuteCommand(async (params) => {
 });
 async function refreshSettings() {
   try {
-    const cfg = await connection.workspace.getConfiguration([
-      { section: "asciidoc-lsp" },
-      { section: "asciidoc" }
-    ]);
+    const cfg = await connection.workspace.getConfiguration("asciidoc-preview");
     if (Array.isArray(cfg)) {
       for (const item of cfg) {
         applySettingsObject(item);
@@ -48521,7 +48514,7 @@ function applySettingsObject(raw) {
     return;
   }
   const obj = raw;
-  const candidates = [obj, obj.settings, obj.asciidoc, obj["asciidoc-lsp"]].filter(
+  const candidates = [obj, obj.settings, obj.asciidoc, obj["asciidoc-preview"]].filter(
     (v) => v && typeof v === "object"
   );
   for (const next of candidates) {
@@ -48540,8 +48533,8 @@ function normalizeEngine(value) {
   return "asciidoctor-js";
 }
 function isAsciiDoc(uri) {
-  const lower = uri.toLowerCase();
-  return lower.endsWith(".adoc") || lower.endsWith(".asciidoc");
+  const path = uri.split("?")[0].toLowerCase();
+  return path.endsWith(".adoc") || path.endsWith(".asciidoc") || path.endsWith(".asc") || path.endsWith(".ad");
 }
 function renderToTempHtml(doc) {
   const sourcePath = uriToFsPath(doc.uri);
@@ -48551,7 +48544,7 @@ function renderToTempHtml(doc) {
   mkdirSync(outDir, { recursive: true });
   const outPath = join(outDir, `${hash}.html`);
   if (settings.engine === "asciidoctor-d") {
-    return renderWithAsciidoctorD(doc, baseDir, outPath);
+    return renderWithAsciidoctorD(doc, baseDir, outPath, hash, sourcePath);
   }
   const html = asciidoctor.convert(doc.getText(), {
     safe: "safe",
@@ -48566,32 +48559,50 @@ function renderToTempHtml(doc) {
   writeFileSync(outPath, html, "utf8");
   return outPath;
 }
-function renderWithAsciidoctorD(doc, baseDir, outPath) {
+function renderWithAsciidoctorD(doc, baseDir, outPath, hash, sourcePath) {
   const bin = resolveAsciidoctorD();
-  const srcPath = join(
-    tmpdir(),
-    "zed-asciidoc-preview",
-    `src-${Date.now()}.adoc`
-  );
-  writeFileSync(srcPath, doc.getText(), "utf8");
-  const result = spawnSync(bin, ["-o", outPath, srcPath], {
-    cwd: baseDir,
-    encoding: "utf8"
-  });
-  if (result.error) {
-    throw new Error(
-      `Failed to run asciidoctor-d (${bin}): ${result.error.message}. Install it or set lsp.asciidoc-lsp.settings.asciidoctorDPath.`
-    );
+  let srcPath = sourcePath ? join(baseDir, `.zed-asciidoc-preview-${hash}.adoc`) : join(outDirForUntitled(), `src-${hash}.adoc`);
+  try {
+    mkdirSync(dirname(srcPath), { recursive: true });
+    writeFileSync(srcPath, doc.getText(), "utf8");
+  } catch (err) {
+    if (!sourcePath) {
+      throw err;
+    }
+    srcPath = join(outDirForUntitled(), `src-${hash}.adoc`);
+    mkdirSync(dirname(srcPath), { recursive: true });
+    writeFileSync(srcPath, doc.getText(), "utf8");
   }
-  if (result.status !== 0) {
-    throw new Error(
-      `asciidoctor-d exited ${result.status}: ${result.stderr || result.stdout}`
-    );
+  try {
+    const result = spawnSync(bin, ["-o", outPath, srcPath], {
+      cwd: baseDir,
+      encoding: "utf8"
+    });
+    if (result.error) {
+      throw new Error(
+        `Failed to run asciidoctor-d (${bin}): ${result.error.message}. Install it or set lsp.asciidoc-preview.settings.asciidoctorDPath.`
+      );
+    }
+    if (result.status !== 0) {
+      throw new Error(
+        `asciidoctor-d exited ${result.status}: ${result.stderr || result.stdout}`
+      );
+    }
+    if (!existsSync(outPath)) {
+      throw new Error("asciidoctor-d did not write the expected HTML file");
+    }
+    return outPath;
+  } finally {
+    try {
+      unlinkSync(srcPath);
+    } catch {
+    }
   }
-  if (!existsSync(outPath)) {
-    throw new Error("asciidoctor-d did not write the expected HTML file");
-  }
-  return outPath;
+}
+function outDirForUntitled() {
+  const dir = join(tmpdir(), "zed-asciidoc-preview");
+  mkdirSync(dir, { recursive: true });
+  return dir;
 }
 function resolveAsciidoctorD() {
   if (settings.asciidoctorDPath && existsSync(settings.asciidoctorDPath)) {
@@ -48604,7 +48615,7 @@ function resolveAsciidoctorD() {
     return line;
   }
   throw new Error(
-    'engine is "asciidoctor-d" but asciidoctor-d was not found on PATH. Download a release from dlang-supplemental/asciidoctor-d or set asciidoctorDPath.'
+    'engine is "asciidoctor-d" but asciidoctor-d was not found. Set lsp.asciidoc-preview.settings.asciidoctorDPath or install a release from dlang-supplemental/asciidoctor-d.'
   );
 }
 function uriToFsPath(uri) {
